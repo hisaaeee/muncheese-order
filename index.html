@@ -119,6 +119,11 @@ textarea{width:100%;min-height:240px;font:14px/1.6 ui-monospace,Menlo,monospace;
       <div class="full"><label>担当者名・備考（任意）</label><input id="s-note" placeholder="例：田中様、前日15時締め"></div>
       <div class="full"><button class="btn" id="s-save">保存する</button></div>
     </div>
+    <p class="note">クラウド保存：GoogleドライブのURLを入れると、どの端末で開いても同じデータになり、履歴を消しても消えません（設定方法は運営に確認）。</p>
+    <div class="form">
+      <div class="full"><label>クラウド保存URL</label><input id="c-url" placeholder="https://script.google.com/macros/s/…/exec"></div>
+      <div class="full"><button class="btn" id="c-save">クラウド保存をオンにする</button></div>
+    </div>
     <p class="note">バックアップ：データはこの端末の中だけに保存されます。月1回「バックアップをコピー」してLINEのKeepメモなどに貼っておくと、機種変更やデータ消失のときに「読み込む」で戻せます。</p>
     <div class="form">
       <div class="full"><button class="btn" id="bk-copy">バックアップをコピー</button></div>
@@ -152,10 +157,20 @@ document.body.insertAdjacentHTML('beforeend',MARKUP);document.title='MUNCHEESE �
   const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
   let art=null, artOK=false, pubTimer=null, publishing=false;
+  const CK='muncheese-cloud-url';let cloudUrl='';try{cloudUrl=localStorage.getItem(CK)||''}catch(e){}
+  let cloudTimer=null;
+  function cloudPush(){if(!cloudUrl)return;clearTimeout(cloudTimer);setStatus('クラウドに保存中…');
+    cloudTimer=setTimeout(async()=>{try{const r=await fetch(cloudUrl,{method:'POST',body:JSON.stringify(snapshot())});if(!r.ok)throw 0;setStatus('クラウド保存済み '+fmtDate(Date.now()))}catch(e){setStatus('クラウド保存に失敗（端末には保存済み）')}},1500)}
+  async function cloudPull(){if(!cloudUrl)return;setStatus('クラウドから読み込み中…');
+    try{const r=await fetch(cloudUrl,{cache:'no-store'});const d=await r.json();
+      if(d&&Array.isArray(d.items)&&(d.ts||0)>(state.ts||0)){state.items=d.items;state.orders=d.orders||[];state.sup=d.sup||state.sup;state.ts=d.ts;try{localStorage.setItem(LS,JSON.stringify(snapshot()))}catch(e){}renderAll()}
+      else if(d&&!Array.isArray(d.items)){cloudPush();return}
+      setStatus('クラウド保存オン')}catch(e){setStatus('クラウドに接続できません（端末のデータを表示中）')}}
   function snapshot(){return {items:state.items,orders:state.orders,sup:state.sup,ts:state.ts}}
   function save(){state.ts=Date.now();
     try{localStorage.setItem(LS,JSON.stringify(snapshot()))}catch(e){}
     if(artOK){setStatus('保存中…');clearTimeout(pubTimer);pubTimer=setTimeout(publishNow,2500)}
+    else if(cloudUrl)cloudPush();
     else setStatus('保存済み '+fmtDate(state.ts))}
   async function publishNow(){if(publishing)return;publishing=true;
     try{sessionStorage.setItem('mc-tab',curPage())}catch(e){}
@@ -269,12 +284,16 @@ document.body.insertAdjacentHTML('beforeend',MARKUP);document.title='MUNCHEESE �
     $('#f-id').value=it.id;$('#f-name').value=it.name;$('#f-cat').value=it.cat;$('#f-unit').value=it.unit;$('#f-par').value=it.par;$('#f-lot').value=it.lot;$('#f-save').textContent='更新する';window.scrollTo(0,0)});
   $('#s-save').addEventListener('click',()=>{state.sup={name:$('#s-name').value.trim(),email:$('#s-email').value.trim(),note:$('#s-note').value.trim()};save();buildOrder();toast('保存しました')});
 
+  $('#c-url').value=cloudUrl;
+  $('#c-save').addEventListener('click',async()=>{const u=$('#c-url').value.trim();if(u&&!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(u)){toast('URLの形式が違います（…/exec で終わるもの）');return}
+    cloudUrl=u;try{localStorage.setItem(CK,u)}catch(e){}if(!u){setStatus('保存済み');toast('クラウド保存をオフにしました');return}
+    toast('接続を確認しています…');await cloudPull();if(cloudUrl)cloudPush()});
   $('#bk-copy').addEventListener('click',()=>copyText(JSON.stringify(snapshot())));
   $('#bk-load').addEventListener('click',async()=>{let d;try{d=JSON.parse($('#bk-text').value.trim())}catch(e){toast('バックアップの形式が違います');return}
     if(!d||!Array.isArray(d.items)){toast('バックアップの形式が違います');return}
     if(!await ask('今のデータをバックアップの内容で置き換えますか？','置き換える'))return;
     state.items=d.items;state.orders=d.orders||[];state.sup=d.sup||state.sup;save();$('#bk-text').value='';renderAll();toast('読み込みました')});
-  load();renderAll();let t0='stock';try{t0=sessionStorage.getItem('mc-tab')||'stock';sessionStorage.removeItem('mc-tab')}catch(e){}show(t0);
+  load();renderAll();let t0='stock';try{t0=sessionStorage.getItem('mc-tab')||'stock';sessionStorage.removeItem('mc-tab')}catch(e){}show(t0);cloudPull();
   (async()=>{return;try{art=await window.claude.use('artifact')}catch(e){art=null}
     if(art){artOK=true;setStatus('共有保存オン')}})();
 })();
