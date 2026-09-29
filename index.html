@@ -119,6 +119,12 @@ textarea{width:100%;min-height:240px;font:14px/1.6 ui-monospace,Menlo,monospace;
       <div class="full"><label>担当者名・備考（任意）</label><input id="s-note" placeholder="例：田中様、前日15時締め"></div>
       <div class="full"><button class="btn" id="s-save">保存する</button></div>
     </div>
+    <p class="note">バックアップ：データはこの端末の中だけに保存されます。月1回「バックアップをコピー」してLINEのKeepメモなどに貼っておくと、機種変更やデータ消失のときに「読み込む」で戻せます。</p>
+    <div class="form">
+      <div class="full"><button class="btn" id="bk-copy">バックアップをコピー</button></div>
+      <div class="full"><label>バックアップを貼り付けて読み込む</label><input id="bk-text" placeholder="ここに貼り付け"></div>
+      <div class="full"><button class="btn ghost" id="bk-load">読み込む（今のデータを置き換え）</button></div>
+    </div>
   </section>
 </main>
 <div class="bar" id="bar">
@@ -263,6 +269,11 @@ document.body.insertAdjacentHTML('beforeend',MARKUP);document.title='MUNCHEESE �
     $('#f-id').value=it.id;$('#f-name').value=it.name;$('#f-cat').value=it.cat;$('#f-unit').value=it.unit;$('#f-par').value=it.par;$('#f-lot').value=it.lot;$('#f-save').textContent='更新する';window.scrollTo(0,0)});
   $('#s-save').addEventListener('click',()=>{state.sup={name:$('#s-name').value.trim(),email:$('#s-email').value.trim(),note:$('#s-note').value.trim()};save();buildOrder();toast('保存しました')});
 
+  $('#bk-copy').addEventListener('click',()=>copyText(JSON.stringify(snapshot())));
+  $('#bk-load').addEventListener('click',async()=>{let d;try{d=JSON.parse($('#bk-text').value.trim())}catch(e){toast('バックアップの形式が違います');return}
+    if(!d||!Array.isArray(d.items)){toast('バックアップの形式が違います');return}
+    if(!await ask('今のデータをバックアップの内容で置き換えますか？','置き換える'))return;
+    state.items=d.items;state.orders=d.orders||[];state.sup=d.sup||state.sup;save();$('#bk-text').value='';renderAll();toast('読み込みました')});
   load();renderAll();let t0='stock';try{t0=sessionStorage.getItem('mc-tab')||'stock';sessionStorage.removeItem('mc-tab')}catch(e){}show(t0);
   (async()=>{return;try{art=await window.claude.use('artifact')}catch(e){art=null}
     if(art){artOK=true;setStatus('共有保存オン')}})();
